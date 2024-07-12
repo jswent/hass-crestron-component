@@ -2,6 +2,7 @@
 
 import voluptuous as vol
 import logging
+from asyncio import sleep
 
 import homeassistant.helpers.config_validation as cv
 from homeassistant.components.media_player import (
@@ -57,6 +58,7 @@ class CrestronRoom(MediaPlayerEntity):
             | SUPPORT_VOLUME_MUTE
             | SUPPORT_VOLUME_SET
             | SUPPORT_TURN_OFF
+            | SUPPORT_TURN_ON
         )
         self._mute_join = config.get(CONF_MUTE_JOIN)
         self._volume_join = config.get(CONF_VOLUME_JOIN)
@@ -120,7 +122,9 @@ class CrestronRoom(MediaPlayerEntity):
         return self._hub.get_analog(self._volume_join) / 65535
 
     async def async_mute_volume(self, mute):
-        self._hub.set_digital(self._mute_join, mute)
+        self._hub.set_digital(self._mute_join, True)
+        await sleep(0.05)
+        self._hub.set_digital(self._mute_join, False)
 
     async def async_set_volume_level(self, volume):
         self._hub.set_analog(self._volume_join, int(volume * 65535))
@@ -132,3 +136,6 @@ class CrestronRoom(MediaPlayerEntity):
 
     async def async_turn_off(self):
         self._hub.set_analog(self._source_number_join, 0)
+
+    async def async_turn_on(self):
+        self._hub.set_analog(self._source_number_join, 1)
