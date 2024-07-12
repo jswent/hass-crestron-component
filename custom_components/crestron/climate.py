@@ -2,6 +2,7 @@
 
 import voluptuous as vol
 import logging
+from asyncio import sleep
 
 import homeassistant.helpers.config_validation as cv
 from homeassistant.components.climate import ClimateEntity
@@ -178,33 +179,31 @@ class CrestronThermostat(ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode):
         if hvac_mode == HVAC_MODE_HEAT_COOL:
-            self._hub.set_digital(self._mode_cool_join, False)
-            self._hub.set_digital(self._mode_off_join, False)
-            self._hub.set_digital(self._mode_heat_join, False)
             self._hub.set_digital(self._mode_auto_join, True)
+            await sleep(0.05)
+            self._hub.set_digital(self._mode_auto_join, False)
         if hvac_mode == HVAC_MODE_HEAT:
-            self._hub.set_digital(self._mode_auto_join, False)
-            self._hub.set_digital(self._mode_cool_join, False)
-            self._hub.set_digital(self._mode_off_join, False)
             self._hub.set_digital(self._mode_heat_join, True)
+            await sleep(0.05)
+            self._hub.set_digital(self._mode_heat_join, False)
         if hvac_mode == HVAC_MODE_COOL:
-            self._hub.set_digital(self._mode_auto_join, False)
-            self._hub.set_digital(self._mode_off_join, False)
-            self._hub.set_digital(self._mode_heat_join, False)
             self._hub.set_digital(self._mode_cool_join, True)
-        if hvac_mode == HVAC_MODE_OFF:
-            self._hub.set_digital(self._mode_auto_join, False)
+            await sleep(0.05)
             self._hub.set_digital(self._mode_cool_join, False)
-            self._hub.set_digital(self._mode_heat_join, False)
+        if hvac_mode == HVAC_MODE_OFF:
             self._hub.set_digital(self._mode_off_join, True)
+            await sleep(0.05)
+            self._hub.set_digital(self._mode_off_join, False)
 
     async def async_set_fan_mode(self, fan_mode):
         if fan_mode == FAN_AUTO:
-            self._hub.set_digital(self._fan_on_join, False)
             self._hub.set_digital(self._fan_auto_join, True)
-        if fan_mode == FAN_ON:
+            await sleep(0.05)
             self._hub.set_digital(self._fan_auto_join, False)
+        if fan_mode == FAN_ON:
             self._hub.set_digital(self._fan_on_join, True)
+            await sleep(0.05)
+            self._hub.set_digital(self._fan_on_join, False)
 
     async def async_set_temperature(self, **kwargs):
         self._hub.set_analog(self._heat_sp_join, int(kwargs["target_temp_low"]) * 10)
