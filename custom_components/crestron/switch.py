@@ -15,11 +15,12 @@ PLATFORM_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_NAME): cv.string,
         vol.Optional(CONF_DEVICE_CLASS): cv.string,
-        vol.Required(CONF_SWITCH_JOIN): cv.positive_int,           
+        vol.Required(CONF_SWITCH_JOIN): cv.positive_int,
         vol.Required(CONF_PULSED): cv.boolean,
     },
     extra=vol.ALLOW_EXTRA,
 )
+
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
     hub = hass.data[DOMAIN][HUB]
@@ -73,18 +74,16 @@ class CrestronSwitch(SwitchEntity):
 
     async def async_turn_on(self, **kwargs):
         if self._pulsed:
-            if not self.is_on:
-                self._hub.set_digital(self._switch_join, True)
-                await sleep(0.05)
-                self._hub.set_digital(self._switch_join, False)
+            self._hub.set_digital(self._switch_join, True)
+            await sleep(0.05)
+            self._hub.set_digital(self._switch_join, False)
         else:
             self._hub.set_digital(self._switch_join, True)
 
     async def async_turn_off(self, **kwargs):
         if self._pulsed:
-            if self.is_on:
-                self._hub.set_digital(self._switch_join, True)
-                await sleep(0.05)
-                self._hub.set_digital(self._switch_join, False)
+            self._hub.set_digital(self._switch_join, True)
+            await sleep(0.05)
+            self._hub.set_digital(self._switch_join, False)
         else:
             self._hub.set_digital(self._switch_join, False)

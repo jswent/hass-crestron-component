@@ -17,6 +17,8 @@ from homeassistant.const import STATE_ON, STATE_OFF, CONF_NAME
 from .const import (
     HUB,
     DOMAIN,
+    CONF_POWER_ON_JOIN,
+    CONF_POWER_OFF_JOIN,
     CONF_MUTE_JOIN,
     CONF_VOLUME_JOIN,
     CONF_SOURCE_NUM_JOIN,
@@ -25,7 +27,7 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-SOURCES_SCHEMA = vol.Schema (
+SOURCES_SCHEMA = vol.Schema(
     {
         cv.positive_int: cv.string,
     }
@@ -34,13 +36,16 @@ SOURCES_SCHEMA = vol.Schema (
 PLATFORM_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_NAME): cv.string,
-        vol.Required(CONF_MUTE_JOIN): cv.positive_int,           
-        vol.Required(CONF_SOURCE_NUM_JOIN): cv.positive_int,           
+        vol.Required(CONF_POWER_ON_JOIN): cv.positive_int,
+        vol.Required(CONF_POWER_OFF_JOIN): cv.positive_int,
+        vol.Required(CONF_MUTE_JOIN): cv.positive_int,
+        vol.Required(CONF_SOURCE_NUM_JOIN): cv.positive_int,
         vol.Required(CONF_VOLUME_JOIN): cv.positive_int,
         vol.Required(CONF_SOURCES): SOURCES_SCHEMA,
     },
     extra=vol.ALLOW_EXTRA,
 )
+
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
     hub = hass.data[DOMAIN][HUB]
@@ -60,6 +65,8 @@ class CrestronRoom(MediaPlayerEntity):
             | SUPPORT_TURN_OFF
             | SUPPORT_TURN_ON
         )
+        self._power_on_join = config.get(CONF_POWER_ON_JOIN)
+        self._power_off_join = config.get(CONF_POWER_OFF_JOIN)
         self._mute_join = config.get(CONF_MUTE_JOIN)
         self._volume_join = config.get(CONF_VOLUME_JOIN)
         self._source_number_join = config.get(CONF_SOURCE_NUM_JOIN)
@@ -108,10 +115,7 @@ class CrestronRoom(MediaPlayerEntity):
 
     @property
     def state(self):
-        if self._hub.get_analog(self._source_number_join) == 0:
-            return STATE_OFF
-        else:
-            return STATE_ON
+        return self._hub.get_digital(self._power_on_join)
 
     @property
     def is_volume_muted(self):
@@ -135,7 +139,9 @@ class CrestronRoom(MediaPlayerEntity):
                 self._hub.set_analog(self._source_number_join, input_num)
 
     async def async_turn_off(self):
-        self._hub.set_analog(self._source_number_join, 0)
+        self._hub.set_digital(self._power_off_join, True)
+        await sleep(0.05)
+        self._hub.set_digital(self._power_off_join, False)
 
     async def async_turn_on(self):
         self._hub.set_analog(self._source_number_join, 1)

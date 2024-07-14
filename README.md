@@ -230,12 +230,14 @@ switch:
 
 Use media_player to represent the output of a multi-zone switcher. For example a PAD-8A is an 8x8 (8 inputs x 8 outputs) audio switcher. This can be represented by 8 media player components (one for each output). The component supports source selection (input selection) and volume + mute control. So it is modeled as a "speaker" media player type in Home Assistant.
 
-This works rather nicely with the template media player integration to allow intuitive control of source devices connected to a multi-zone switcher like the PAD8A.
+This works by turning power on via input selection (the default source is 1 from _sources_), and turning power off via a digital join. This can also be done by setting the input source to 0, however I found this caused complications in my program.
 
 ```yaml
 media_player:
   - platform: crestron
     name: "Kitchen Speakers"
+    power_on_join: 25
+    power_off_join: 26
     mute_join: 27
     volume_join: 19
     source_number_join: 13
@@ -249,6 +251,8 @@ media_player:
 ```
 
 - _name_: The entity id will be derived from this string (lower-cased with \_ for spaces). The friendly name will be set to this string.
+- _power_on_join_: digital feedback (read-only) that represents the state of the audio zone's power.
+- _power_off_join_: digital join that represents the power off button of the audio zone. Signal will be pulsed.
 - _mute_join_: digital join that represents the mute state of the channel. Note this is not a toggle. Both to and from the control system True = muted, False = not muted. This might require some extra logic on the control system side if you only have logic that takes a toggle.
 - _volume_join_: analog join that represents the volume of the channel (0-65535)
 - _source_number_join_: analog join that represents the selected input for the output channel. 1 would correspond to input 1, 2 to input 2, and so on.
