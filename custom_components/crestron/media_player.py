@@ -115,7 +115,10 @@ class CrestronRoom(MediaPlayerEntity):
 
     @property
     def state(self):
-        return self._hub.get_digital(self._power_on_join)
+        if self._hub.get_digital(self._power_on_join):
+            return STATE_ON
+        else:
+            return STATE_OFF
 
     @property
     def is_volume_muted(self):
