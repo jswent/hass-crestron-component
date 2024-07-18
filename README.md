@@ -20,6 +20,38 @@ Currently supported devices:
   - The component acts as a TCP server, so you must specify the port number to listen on using the `port:` parameter.
 - Restart Home Assistant
 
+## Adding multiple XSIG domains to Home Assistant
+
+If you would like to separate the instances of this integration (for example, to use across multiple Crestron processor slots), you may achieve this by duplicating this component in Home Assistant.
+
+- Add the `crestron` component as above
+- Duplicate the component folder in `custom_components` with a new name (e.g. `crestron_audio`)
+- Edit `manifest.json` to change the domain the match the folder name
+- Edit `const.py` to change the domain to match the folder name
+- Add a block for the new domain in your `configuration.yaml`
+  - Note: You must use a different port than for the original integration
+- Follow the steps below on your Crestron processor to set up a new TCP/IP client and XSIG(s)
+
+At the end your `configuration.yaml` should look something like this:
+
+```yaml
+crestron:
+  port: 8000
+crestron_audio:
+  port: 8001
+```
+
+And make sure when defining new devices you specify the correct platform
+
+```yaml
+light:
+  - platform: crestron # Communicates over port 8000
+media_player:
+  - platform: crestron_audio # Communicates over port 8001
+```
+
+> I've also created a script to automate this process as it can become a bit cumbersone and source can easily become out of sync. The gist can be found [here](https://gist.github.com/jswent/532d9aee556cb636262bcc523c38fe31).
+
 ## On the control system
 
 - Add a TCP/IP Client device to the control system
