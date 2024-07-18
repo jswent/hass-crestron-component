@@ -142,6 +142,8 @@ class CrestronRoom(MediaPlayerEntity):
         self._hub.set_digital(self._power_off_join, True)
         await sleep(0.05)
         self._hub.set_digital(self._power_off_join, False)
+        await sleep(0.05)
+        self._hub.set_analog(self._source_number_join, 0)
 
     async def async_turn_on(self):
         self._hub.set_analog(self._source_number_join, 1)
