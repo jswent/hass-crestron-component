@@ -1,4 +1,5 @@
 """Platform for Crestron Light integration."""
+
 import voluptuous as vol
 import logging
 
@@ -13,10 +14,11 @@ PLATFORM_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_NAME): cv.string,
         vol.Required(CONF_TYPE): cv.string,
-        vol.Required(CONF_BRIGHTNESS_JOIN): cv.positive_int,           
+        vol.Required(CONF_BRIGHTNESS_JOIN): cv.positive_int,
     },
     extra=vol.ALLOW_EXTRA,
 )
+
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
     hub = hass.data[DOMAIN][HUB]
@@ -60,19 +62,19 @@ class CrestronLight(LightEntity):
     @property
     def brightness(self):
         if self._supported_features == SUPPORT_BRIGHTNESS:
-            return int(self._hub.get_analog(self._brightness_join) / 255)
+            return int(self._hub.get_analog(self._brightness_join) / 257)
 
     @property
     def is_on(self):
         if self._supported_features == SUPPORT_BRIGHTNESS:
-            if int(self._hub.get_analog(self._brightness_join) / 255) > 0:
+            if int(self._hub.get_analog(self._brightness_join) / 257) > 0:
                 return True
             else:
                 return False
 
     async def async_turn_on(self, **kwargs):
         if "brightness" in kwargs:
-            self._hub.set_analog(self._brightness_join, int(kwargs["brightness"] * 255))
+            self._hub.set_analog(self._brightness_join, int(kwargs["brightness"] * 257))
         else:
             self._hub.set_analog(self._brightness_join, 65535)
 
