@@ -3,7 +3,7 @@
   "name": "Crestron XSIG Integration",
   "documentation": "https://github.com/jswent/hass-crestron-component/blob/master/README.md",
   "dependencies": [],
-  "codeowners": ["@jswent"],
+  "codeowners": ["@jswent", "@npope"],
   "requirements": [],
-  "version": "0.2.3"
+  "version": "0.3.0"
 }
