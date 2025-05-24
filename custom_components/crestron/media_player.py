@@ -81,24 +81,12 @@ class CrestronRoom(MediaPlayerEntity):
         self.async_write_ha_state()
 
     @property
-    def available(self):
-        return self._hub.is_available()
-
-    @property
     def name(self):
         return self._name
 
     @property
-    def should_poll(self):
-        return False
-
-    @property
-    def device_class(self):
-        return self._device_class
-
-    @property
-    def supported_features(self):
-        return self._supported_features
+    def available(self):
+        return self._hub.is_available()
 
     @property
     def source_list(self):
