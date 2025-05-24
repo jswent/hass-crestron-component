@@ -1,6 +1,5 @@
 """Platform for Crestron Light integration."""
 
-from homeassistant.core import cached_property
 import voluptuous as vol
 import logging
 
@@ -22,6 +21,9 @@ PLATFORM_SCHEMA = vol.Schema(
 
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
+    if not config or len(config) <= 1:
+        return
+
     hub = hass.data[DOMAIN][HUB]
     entity = [CrestronLight(hub, config)]
     async_add_entities(entity)
