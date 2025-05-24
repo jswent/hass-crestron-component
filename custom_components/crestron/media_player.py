@@ -6,6 +6,7 @@ import logging
 from asyncio import sleep
 
 import homeassistant.helpers.config_validation as cv
+from homeassistant.util import slugify
 from homeassistant.components.media_player import (
     MediaPlayerEntity,
     MediaPlayerEntityFeature,
@@ -83,6 +84,10 @@ class CrestronRoom(MediaPlayerEntity):
     @property
     def name(self):
         return self._name
+
+    @property
+    def unique_id(self):
+        return slugify(self._name)
 
     @property
     def available(self):
