@@ -1,8 +1,8 @@
 """The Crestron Integration Component"""
 
-import asyncio
 import logging
 
+from homeassistant.config_entries import ConfigType
 import voluptuous as vol
 
 import homeassistant.helpers.config_validation as cv
@@ -10,8 +10,7 @@ from homeassistant.helpers.discovery import async_load_platform
 from homeassistant.helpers.event import TrackTemplate, async_track_template_result
 from homeassistant.helpers.template import Template
 from homeassistant.helpers.script import Script
-from homeassistant.core import callback, Context
-from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+from homeassistant.core import HomeAssistant, callback, Context
 from homeassistant.const import (
     EVENT_HOMEASSISTANT_STOP,
     CONF_VALUE_TEMPLATE,
@@ -24,25 +23,29 @@ from homeassistant.const import (
 )
 
 from .crestron import CrestronXsig
-from .const import CONF_PORT, HUB, DOMAIN, CONF_JOIN, CONF_SCRIPT, CONF_TO_HUB, CONF_FROM_HUB
-#from .control_surface_sync import ControlSurfaceSync
+from .const import (
+    CONF_PORT,
+    HUB,
+    DOMAIN,
+    CONF_JOIN,
+    CONF_SCRIPT,
+    CONF_TO_HUB,
+    CONF_FROM_HUB,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 TO_JOINS_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_JOIN): cv.string,
-        vol.Optional(CONF_ENTITY_ID): cv.entity_id,           
+        vol.Optional(CONF_ENTITY_ID): cv.entity_id,
         vol.Optional(CONF_ATTRIBUTE): cv.string,
-        vol.Optional(CONF_VALUE_TEMPLATE): cv.template
+        vol.Optional(CONF_VALUE_TEMPLATE): cv.template,
     }
 )
 
 FROM_JOINS_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_JOIN): cv.string,
-        vol.Required(CONF_SCRIPT): cv.SCRIPT_SCHEMA
-    }
+    {vol.Required(CONF_JOIN): cv.string, vol.Required(CONF_SCRIPT): cv.SCRIPT_SCHEMA}
 )
 
 CONFIG_SCHEMA = vol.Schema(
@@ -51,7 +54,9 @@ CONFIG_SCHEMA = vol.Schema(
             {
                 vol.Required(CONF_PORT): cv.port,
                 vol.Optional(CONF_TO_HUB): vol.All(cv.ensure_list, [TO_JOINS_SCHEMA]),
-                vol.Optional(CONF_FROM_HUB): vol.All(cv.ensure_list, [FROM_JOINS_SCHEMA])
+                vol.Optional(CONF_FROM_HUB): vol.All(
+                    cv.ensure_list, [FROM_JOINS_SCHEMA]
+                ),
             }
         )
     },
@@ -69,7 +74,7 @@ PLATFORMS = [
 ]
 
 
-async def async_setup(hass, config):
+async def async_setup(hass: HomeAssistant, config: ConfigType):
     """Set up a the crestron component."""
 
     if config.get(DOMAIN) is not None:
@@ -80,12 +85,16 @@ async def async_setup(hass, config):
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, hub.stop)
 
         for platform in PLATFORMS:
-            async_load_platform(hass, platform, DOMAIN, {}, config)
+            hass.async_create_task(
+                async_load_platform(hass, platform, DOMAIN, {}, config)
+            )
 
     return True
 
+
 class CrestronHub:
-    ''' Wrapper for the CrestronXsig library '''
+    """Wrapper for the CrestronXsig library"""
+
     def __init__(self, hass, config):
         self.hass = hass
         self.hub = hass.data[DOMAIN][HUB] = CrestronXsig()
@@ -100,7 +109,9 @@ class CrestronHub:
                 if CONF_VALUE_TEMPLATE in entity:
                     template = entity[CONF_VALUE_TEMPLATE]
                     self.to_hub[entity[CONF_JOIN]] = template
-                    track_templates.append(TrackTemplate(template, None))
+                    track_templates.append(
+                        TrackTemplate(template, None, rate_limit=0.5)
+                    )
                 elif CONF_ATTRIBUTE in entity and CONF_ENTITY_ID in entity:
                     template_string = (
                         "{{state_attr('"
@@ -111,12 +122,16 @@ class CrestronHub:
                     )
                     template = Template(template_string, hass)
                     self.to_hub[entity[CONF_JOIN]] = template
-                    track_templates.append(TrackTemplate(template, None))
+                    track_templates.append(
+                        TrackTemplate(template, None, rate_limit=0.5)
+                    )
                 elif CONF_ENTITY_ID in entity:
                     template_string = "{{states('" + entity[CONF_ENTITY_ID] + "')}}"
                     template = Template(template_string, hass)
                     self.to_hub[entity[CONF_JOIN]] = template
-                    track_templates.append(TrackTemplate(template, None))
+                    track_templates.append(
+                        TrackTemplate(template, None, rate_limit=0.5)
+                    )
             self.tracker = async_track_template_result(
                 self.hass, track_templates, self.template_change_callback
             )
@@ -127,14 +142,14 @@ class CrestronHub:
     async def start(self):
         await self.hub.listen(self.port)
 
-    def stop(self, event):
-        """ remove callback(s) and template trackers """
+    async def stop(self, event):
+        """remove callback(s) and template trackers"""
         self.hub.remove_callback(self.join_change_callback)
         self.tracker.async_remove()
-        self.hub.stop()
+        await self.hub.stop()
 
     async def join_change_callback(self, cbtype, value):
-        """ Call service for tracked join change (from_hub)"""
+        """Call service for tracked join change (from_hub)"""
         for join in self.from_hub:
             if cbtype == join[CONF_JOIN]:
                 # For digital joins, ignore on>off transitions  (avoids double calls to service for momentary presses)
@@ -160,7 +175,7 @@ class CrestronHub:
 
     @callback
     def template_change_callback(self, event, updates):
-        """ Set join from value_template (to_hub)"""
+        """Set join from value_template (to_hub)"""
         # track_template_result = updates.pop()
         for track_template_result in updates:
             update_result = track_template_result.result
@@ -226,4 +241,3 @@ class CrestronHub:
                         f"sync_joins_to_hub setting serial join {int(join[1:])} to {str(result)}"
                     )
                     self.hub.set_serial(int(join[1:]), str(result))
-
