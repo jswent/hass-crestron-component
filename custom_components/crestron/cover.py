@@ -7,16 +7,9 @@ import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.event import call_later
 from homeassistant.components.cover import (
+    CoverDeviceClass,
     CoverEntity,
-    DEVICE_CLASS_SHADE,
-    SUPPORT_OPEN,
-    SUPPORT_CLOSE,
-    SUPPORT_SET_POSITION,
-    SUPPORT_STOP,
-    STATE_OPENING,
-    STATE_OPEN,
-    STATE_CLOSING,
-    STATE_CLOSED,
+    CoverEntityFeature,
 )
 from homeassistant.const import CONF_NAME, CONF_TYPE
 from .const import (
@@ -35,7 +28,7 @@ PLATFORM_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_NAME): cv.string,
         vol.Required(CONF_TYPE): cv.string,
-        vol.Required(CONF_POS_JOIN): cv.positive_int,           
+        vol.Required(CONF_POS_JOIN): cv.positive_int,
         vol.Required(CONF_IS_OPENING_JOIN): cv.positive_int,
         vol.Required(CONF_IS_CLOSING_JOIN): cv.positive_int,
         vol.Required(CONF_IS_CLOSED_JOIN): cv.positive_int,
@@ -43,6 +36,7 @@ PLATFORM_SCHEMA = vol.Schema(
     },
     extra=vol.ALLOW_EXTRA,
 )
+
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
     if not config or len(config) <= 1:
@@ -52,14 +46,19 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     entity = [CrestronShade(hub, config)]
     async_add_entities(entity)
 
+
 class CrestronShade(CoverEntity):
     def __init__(self, hub, config):
         self._hub = hub
         if config.get(CONF_TYPE) == "shade":
-            self._device_class = DEVICE_CLASS_SHADE
+            self._device_class = CoverDeviceClass.SHADE
             self._supported_features = (
-                SUPPORT_OPEN | SUPPORT_CLOSE | SUPPORT_SET_POSITION | SUPPORT_STOP
+                CoverEntityFeature.OPEN
+                | CoverEntityFeature.CLOSE
+                | CoverEntityFeature.SET_POSITION
+                | CoverEntityFeature.STOP
             )
+
         self._should_poll = False
 
         self._name = config.get(CONF_NAME)
