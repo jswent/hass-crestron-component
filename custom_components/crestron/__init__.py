@@ -31,6 +31,10 @@ from .const import (
     CONF_SCRIPT,
     CONF_TO_HUB,
     CONF_FROM_HUB,
+    CONF_VALUE_JOIN,
+    CONF_SET_ANALOG,
+    CONF_SET_DIGITAL,
+    CONF_SET_SERIAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -61,6 +65,21 @@ CONFIG_SCHEMA = vol.Schema(
         )
     },
     extra=vol.ALLOW_EXTRA,
+)
+
+SET_ANALOG_SCHEME = vol.Schema(
+    {vol.Required(CONF_JOIN): cv.positive_int, vol.Required(CONF_VALUE_JOIN): int}
+)
+
+SET_DIGITAL_SCHEME = vol.Schema(
+    {
+        vol.Required(CONF_JOIN): cv.positive_int,
+        vol.Required(CONF_VALUE_JOIN): cv.boolean,
+    }
+)
+
+SET_SERIAL_SCHEME = vol.Schema(
+    {vol.Required(CONF_JOIN): cv.positive_int, vol.Required(CONF_VALUE_JOIN): cv.string}
 )
 
 PLATFORMS = [
@@ -138,6 +157,45 @@ class CrestronHub:
         if CONF_FROM_HUB in config:
             self.from_hub = config[CONF_FROM_HUB]
             self.hub.register_callback(self.join_change_callback)
+
+        async def async_set_analog(event):
+            _LOGGER.debug(
+                f"async_set_analog setting analog join {event.data[CONF_JOIN]} to {event.data[CONF_VALUE_JOIN]}"
+            )
+            self.hub.set_analog(event.data[CONF_JOIN], event.data[CONF_VALUE_JOIN])
+
+        self.hass.services.async_register(
+            DOMAIN,
+            CONF_SET_ANALOG,
+            async_set_analog,
+            schema=SET_ANALOG_SCHEME,
+        )
+
+        async def async_set_digital(event):
+            _LOGGER.debug(
+                f"async_set_digital setting digital join {event.data[CONF_JOIN]} to {event.data[CONF_VALUE_JOIN]}"
+            )
+            self.hub.set_digital(event.data[CONF_JOIN], event.data[CONF_VALUE_JOIN])
+
+        self.hass.services.async_register(
+            DOMAIN,
+            CONF_SET_DIGITAL,
+            async_set_digital,
+            schema=SET_DIGITAL_SCHEME,
+        )
+
+        async def async_set_serial(event):
+            _LOGGER.debug(
+                f"async_set_serial setting serial join {event.data[CONF_JOIN]} to {event.data[CONF_VALUE_JOIN]}"
+            )
+            self.hub.set_serial(event.data[CONF_JOIN], str(event.data[CONF_VALUE_JOIN]))
+
+        self.hass.services.async_register(
+            DOMAIN,
+            CONF_SET_SERIAL,
+            async_set_serial,
+            schema=SET_SERIAL_SCHEME,
+        )
 
     async def start(self):
         await self.hub.listen(self.port)
