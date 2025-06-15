@@ -164,12 +164,12 @@ class CrestronHub:
             )
             self.hub.set_analog(event.data[CONF_JOIN], event.data[CONF_VALUE_JOIN])
 
-        self.hass.services.async_register(
-            DOMAIN,
-            CONF_SET_ANALOG,
-            async_set_analog,
-            schema=SET_ANALOG_SCHEME,
-        )
+        # self.hass.services.async_register(
+        #     DOMAIN,
+        #     CONF_SET_ANALOG,
+        #     async_set_analog,
+        #     schema=SET_ANALOG_SCHEME,
+        # )
 
         async def async_set_digital(event):
             _LOGGER.debug(
@@ -177,12 +177,12 @@ class CrestronHub:
             )
             self.hub.set_digital(event.data[CONF_JOIN], event.data[CONF_VALUE_JOIN])
 
-        self.hass.services.async_register(
-            DOMAIN,
-            CONF_SET_DIGITAL,
-            async_set_digital,
-            schema=SET_DIGITAL_SCHEME,
-        )
+        # self.hass.services.async_register(
+        #     DOMAIN,
+        #     CONF_SET_DIGITAL,
+        #     async_set_digital,
+        #     schema=SET_DIGITAL_SCHEME,
+        # )
 
         async def async_set_serial(event):
             _LOGGER.debug(
@@ -190,12 +190,12 @@ class CrestronHub:
             )
             self.hub.set_serial(event.data[CONF_JOIN], str(event.data[CONF_VALUE_JOIN]))
 
-        self.hass.services.async_register(
-            DOMAIN,
-            CONF_SET_SERIAL,
-            async_set_serial,
-            schema=SET_SERIAL_SCHEME,
-        )
+        # self.hass.services.async_register(
+        #     DOMAIN,
+        #     CONF_SET_SERIAL,
+        #     async_set_serial,
+        #     schema=SET_SERIAL_SCHEME,
+        # )
 
     async def start(self):
         await self.hub.listen(self.port)
