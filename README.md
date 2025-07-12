@@ -280,6 +280,7 @@ media_player:
       4: "Chromecast"
       7: "Volumio"
       8: "Crestron Streamer"
+    default_source: 3
 ```
 
 - _name_: The entity id will be derived from this string (lower-cased with \_ for spaces). The friendly name will be set to this string.
@@ -289,6 +290,7 @@ media_player:
 - _volume_join_: analog join that represents the volume of the channel (0-65535)
 - _source_number_join_: analog join that represents the selected input for the output channel. 1 would correspond to input 1, 2 to input 2, and so on.
 - _sources_: a dictionary of _input_ to _name_ mappings. The input number is the actual input (corresponding to the source*number_join) number, whereas the name will be shown in the UI when selecting inputs/sources. So when a user selects the \_name* in the UI, the _source_number_join_ will be set to _input_.
+- _default_source_: optional integer field corresponding to sources dictionary, when set the media_player will update the `source_number_join` to the specified value when powering on.
 
 ### Control Surface Sync
 
