@@ -1,12 +1,13 @@
 """Platform for Crestron Light integration."""
 
-import voluptuous as vol
 import logging
 
 import homeassistant.helpers.config_validation as cv
-from homeassistant.components.light import LightEntity, ColorMode
+import voluptuous as vol
+from homeassistant.components.light import ATTR_BRIGHTNESS, ColorMode, LightEntity
 from homeassistant.const import CONF_NAME, CONF_TYPE
-from .const import HUB, DOMAIN, CONF_BRIGHTNESS_JOIN
+
+from .const import CONF_BRIGHTNESS_DEFAULT, CONF_BRIGHTNESS_JOIN, DOMAIN, HUB
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,6 +16,7 @@ PLATFORM_SCHEMA = vol.Schema(
         vol.Required(CONF_NAME): cv.string,
         vol.Required(CONF_TYPE): cv.string,
         vol.Required(CONF_BRIGHTNESS_JOIN): cv.positive_int,
+        vol.Optional(CONF_BRIGHTNESS_DEFAULT, default=230): cv.positive_int,
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -38,9 +40,8 @@ class CrestronLight(LightEntity):
         self._hub = hub
         self._name = config.get(CONF_NAME)
         self._brightness_join = config.get(CONF_BRIGHTNESS_JOIN)
+        self._default_brightness = config.get(CONF_BRIGHTNESS_DEFAULT)
         self._attr_name = self._name
-        self._attr_is_on = False
-        self._attr_brightness = 0
 
     async def async_added_to_hass(self):
         self._hub.register_callback(self.process_callback)
@@ -49,28 +50,27 @@ class CrestronLight(LightEntity):
         self._hub.remove_callback(self.process_callback)
 
     async def process_callback(self, cbtype, value):
-        analog_value = self._hub.get_analog(self._brightness_join)
-        self._attr_brightness = int(analog_value / 257)
-        self._attr_is_on = self._attr_brightness > 0
         self.async_write_ha_state()
 
     @property
-    def available(self):
+    def available(self):  # type: ignore
         return self._hub.is_available()
 
+    @property
+    def brightness(self):  # type: ignore
+        return int(self._hub.get_analog(self._brightness_join) / 257)
+
+    @property
+    def is_on(self):  # type: ignore
+        return bool(self.brightness)
+
     async def async_turn_on(self, **kwargs):
-        if (brightness := kwargs.get("brightness")) is not None:
-            analog_value = int(brightness * 257)
+        if ATTR_BRIGHTNESS in kwargs:
+            self._hub.set_analog(
+                self._brightness_join, int(kwargs[ATTR_BRIGHTNESS] * 257)
+            )
         else:
-            analog_value = 65535
-        self._hub.set_analog(self._brightness_join, analog_value)
-        self._attr_brightness = int(analog_value / 257)
-        self._attr_is_on = True
-        self.async_write_ha_state()
+            self._hub.set_analog(self._brightness_join, self._default_brightness * 257)
 
     async def async_turn_off(self, **kwargs):
         self._hub.set_analog(self._brightness_join, 0)
-        self._attr_brightness = 0
-        self._attr_is_on = False
-        self.async_write_ha_state()
-

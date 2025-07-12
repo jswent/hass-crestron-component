@@ -17,7 +17,7 @@ from homeassistant.util import slugify
 from custom_components.crestron.crestron import CrestronXsig
 
 from .const import (
-    CONF_DEFAULT_SOURCE,
+    CONF_SOURCE_DEFAULT,
     CONF_MUTE_JOIN,
     CONF_POWER_OFF_JOIN,
     CONF_POWER_ON_JOIN,
@@ -45,7 +45,7 @@ PLATFORM_SCHEMA = vol.Schema(
         vol.Required(CONF_SOURCE_NUM_JOIN): cv.positive_int,
         vol.Required(CONF_VOLUME_JOIN): cv.positive_int,
         vol.Required(CONF_SOURCES): SOURCES_SCHEMA,
-        vol.Optional(CONF_DEFAULT_SOURCE): cv.positive_int,
+        vol.Optional(CONF_SOURCE_DEFAULT): cv.positive_int,
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -81,7 +81,7 @@ class CrestronRoom(MediaPlayerEntity):
         self._source_number_join = config.get(CONF_SOURCE_NUM_JOIN)
         self._sources = config.get(CONF_SOURCES)
         self._default_source = self._get_default_source_safe(
-            config.get(CONF_DEFAULT_SOURCE)
+            config.get(CONF_SOURCE_DEFAULT)
         )
 
     def _get_default_source_safe(self, cfg_src):
