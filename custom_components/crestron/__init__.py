@@ -32,6 +32,8 @@ from .const import (
     CONF_TO_HUB,
     CONF_FROM_HUB,
     CONF_VALUE_JOIN,
+    CONF_GET_ANALOG,
+    CONF_GET_DIGITAL,
     CONF_SET_ANALOG,
     CONF_SET_DIGITAL,
 )
@@ -64,6 +66,18 @@ CONFIG_SCHEMA = vol.Schema(
         )
     },
     extra=vol.ALLOW_EXTRA,
+)
+
+GET_ANALOG_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_JOIN): cv.positive_int,
+    }
+)
+
+GET_DIGITAL_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_JOIN): cv.positive_int,
+    }
 )
 
 SET_ANALOG_SCHEME = vol.Schema(
@@ -155,6 +169,32 @@ class CrestronHub:
         if CONF_FROM_HUB in config:
             self.from_hub = config[CONF_FROM_HUB]
             self.hub.register_callback(self.join_change_callback)
+
+        async def async_get_analog(call):
+            join = call.data[CONF_JOIN]
+            value = self.hub.get_analog(join)
+            self.hass.bus.async_fire(
+                f"{DOMAIN}_get_analog_response",
+                {CONF_JOIN: join, CONF_VALUE_JOIN: value},
+            )
+            _LOGGER.debug(f"{DOMAIN}.get_analog join {join}: {value}")
+
+        self.hass.services.async_register(
+            DOMAIN, CONF_GET_ANALOG, async_get_analog, schema=GET_ANALOG_SCHEMA
+        )
+
+        async def async_get_digital(call):
+            join = call.data[CONF_JOIN]
+            value = self.hub.get_digital(join)
+            self.hass.bus.async_fire(
+                f"{DOMAIN}_get_digital_response",
+                {CONF_JOIN: join, CONF_VALUE_JOIN: value},
+            )
+            _LOGGER.debug(f"{DOMAIN}.get_digital join {join}: {value}")
+
+        self.hass.services.async_register(
+            DOMAIN, CONF_GET_DIGITAL, async_get_digital, schema=GET_DIGITAL_SCHEMA
+        )
 
         async def async_set_analog(event):
             _LOGGER.debug(
