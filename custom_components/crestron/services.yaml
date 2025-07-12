@@ -6,6 +6,7 @@ get_analog:
         number:
           min: 0
           max: 65535
+          mode: box
 
 get_digital:
   fields:
@@ -15,6 +16,7 @@ get_digital:
         number:
           min: 0
           max: 65535
+          mode: box
 
 set_analog:
   fields:
@@ -24,12 +26,14 @@ set_analog:
         number:
           min: 0
           max: 65535
+          mode: box
     value_join:
       required: true
       selector:
         number:
           min: 0
           max: 65535
+          mode: box
 
 set_digital:
   fields:
@@ -39,6 +43,7 @@ set_digital:
         number:
           min: 0
           max: 65535
+          mode: box
     value_join:
       required: true
       selector:
