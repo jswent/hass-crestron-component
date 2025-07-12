@@ -14,7 +14,10 @@ from homeassistant.components.media_player import (
 from homeassistant.const import CONF_NAME, STATE_OFF, STATE_ON
 from homeassistant.util import slugify
 
+from custom_components.crestron.crestron import CrestronXsig
+
 from .const import (
+    CONF_DEFAULT_SOURCE,
     CONF_MUTE_JOIN,
     CONF_POWER_OFF_JOIN,
     CONF_POWER_ON_JOIN,
@@ -42,6 +45,7 @@ PLATFORM_SCHEMA = vol.Schema(
         vol.Required(CONF_SOURCE_NUM_JOIN): cv.positive_int,
         vol.Required(CONF_VOLUME_JOIN): cv.positive_int,
         vol.Required(CONF_SOURCES): SOURCES_SCHEMA,
+        vol.Optional(CONF_DEFAULT_SOURCE): cv.positive_int,
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -67,7 +71,7 @@ class CrestronRoom(MediaPlayerEntity):
         | MediaPlayerEntityFeature.TURN_ON
     )
 
-    def __init__(self, hub, config):
+    def __init__(self, hub: CrestronXsig, config):
         self._hub = hub
         self._name = config.get(CONF_NAME)
         self._power_on_join = config.get(CONF_POWER_ON_JOIN)
@@ -76,6 +80,22 @@ class CrestronRoom(MediaPlayerEntity):
         self._volume_join = config.get(CONF_VOLUME_JOIN)
         self._source_number_join = config.get(CONF_SOURCE_NUM_JOIN)
         self._sources = config.get(CONF_SOURCES)
+        self._default_source = self._get_default_source_safe(
+            config.get(CONF_DEFAULT_SOURCE)
+        )
+
+    def _get_default_source_safe(self, cfg_src):
+        if cfg_src is not None:
+            max_idx = len(self._sources)
+            if 1 <= cfg_src <= max_idx:
+                self._default_source = cfg_src
+            else:
+                _LOGGER.error(
+                    "%s: invalid default_source %s, must be between 1 and %s",
+                    self.entity_id,
+                    cfg_src,
+                    max_idx,
+                )
 
     async def async_added_to_hass(self):
         self._hub.register_callback(self.process_callback)
@@ -146,4 +166,9 @@ class CrestronRoom(MediaPlayerEntity):
         self._hub.set_analog(self._source_number_join, 0)
 
     async def async_turn_on(self):
-        self._hub.set_analog(self._source_number_join, 1)
+        self._hub.set_digital(self._power_on_join, True)
+        await sleep(0.05)
+        self._hub.set_digital(self._power_on_join, False)
+
+        if self._default_source is not None:
+            self._hub.set_analog(self._source_number_join, self._default_source)
