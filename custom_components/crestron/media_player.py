@@ -1,6 +1,5 @@
 """Platform for Crestron Media Player integration."""
 
-from homeassistant.core import cached_property
 import voluptuous as vol
 import logging
 from asyncio import sleep
@@ -8,6 +7,7 @@ from asyncio import sleep
 import homeassistant.helpers.config_validation as cv
 from homeassistant.util import slugify
 from homeassistant.components.media_player import (
+    MediaPlayerDeviceClass,
     MediaPlayerEntity,
     MediaPlayerEntityFeature,
 )
@@ -56,7 +56,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
 
 class CrestronRoom(MediaPlayerEntity):
     _attr_should_poll = False
-    _attr_device_class = "speaker"
+    _attr_device_class = MediaPlayerDeviceClass.SPEAKER
     _attr_supported_features = (
         MediaPlayerEntityFeature.SELECT_SOURCE
         | MediaPlayerEntityFeature.VOLUME_MUTE
