@@ -1,0 +1,27 @@
+set_analog:
+  fields:
+    join:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 65535
+    value_join:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 65535
+
+set_digital:
+  fields:
+    join:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 65535
+    value_join:
+      required: true
+      selector:
+        boolean: {}
