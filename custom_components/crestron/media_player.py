@@ -1,26 +1,28 @@
 """Platform for Crestron Media Player integration."""
 
-import voluptuous as vol
 import logging
 from asyncio import sleep
+from functools import cached_property
 
 import homeassistant.helpers.config_validation as cv
-from homeassistant.util import slugify
+import voluptuous as vol
 from homeassistant.components.media_player import (
     MediaPlayerDeviceClass,
     MediaPlayerEntity,
     MediaPlayerEntityFeature,
 )
-from homeassistant.const import STATE_ON, STATE_OFF, CONF_NAME
+from homeassistant.const import CONF_NAME, STATE_OFF, STATE_ON
+from homeassistant.util import slugify
+
 from .const import (
-    HUB,
-    DOMAIN,
-    CONF_POWER_ON_JOIN,
-    CONF_POWER_OFF_JOIN,
     CONF_MUTE_JOIN,
-    CONF_VOLUME_JOIN,
+    CONF_POWER_OFF_JOIN,
+    CONF_POWER_ON_JOIN,
     CONF_SOURCE_NUM_JOIN,
     CONF_SOURCES,
+    CONF_VOLUME_JOIN,
+    DOMAIN,
+    HUB,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -84,24 +86,24 @@ class CrestronRoom(MediaPlayerEntity):
     async def process_callback(self, cbtype, value):
         self.async_write_ha_state()
 
-    @property
+    @cached_property
     def name(self):
         return self._name
 
-    @property
+    @cached_property
     def unique_id(self):
         return slugify(self._name)
 
     @property
-    def available(self):
+    def available(self):  # type: ignore
         return self._hub.is_available()
 
-    @property
+    @cached_property
     def source_list(self):
         return list(self._sources.values())
 
     @property
-    def source(self):
+    def source(self):  # type: ignore
         source_num = self._hub.get_analog(self._source_number_join)
         if source_num == 0:
             return None
@@ -109,18 +111,18 @@ class CrestronRoom(MediaPlayerEntity):
             return self._sources[source_num]
 
     @property
-    def state(self):
+    def state(self):  # type: ignore
         if self._hub.get_digital(self._power_on_join):
             return STATE_ON
         else:
             return STATE_OFF
 
     @property
-    def is_volume_muted(self):
+    def is_volume_muted(self):  # type: ignore
         return self._hub.get_digital(self._mute_join)
 
     @property
-    def volume_level(self):
+    def volume_level(self):  # type: ignore
         return self._hub.get_analog(self._volume_join) / 65535
 
     async def async_mute_volume(self, mute):
