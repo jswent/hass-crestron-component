@@ -17,10 +17,12 @@ from homeassistant.util import slugify
 from custom_components.crestron.crestron import CrestronXsig
 
 from .const import (
-    CONF_SOURCE_DEFAULT,
+    CONF_DEFAULT_SOURCE,
     CONF_MUTE_JOIN,
     CONF_POWER_OFF_JOIN,
     CONF_POWER_ON_JOIN,
+    CONF_SOURCE_DEFAULT,
+    CONF_SOURCE_DIGITAL_JOINS,
     CONF_SOURCE_NUM_JOIN,
     CONF_SOURCES,
     CONF_VOLUME_JOIN,
@@ -30,24 +32,85 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-SOURCES_SCHEMA = vol.Schema(
-    {
-        cv.positive_int: cv.string,
-    }
+PULSE_SECONDS = 0.05
+
+SOURCES_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            cv.positive_int: cv.string,
+        }
+    ),
+    vol.Length(min=1),
 )
 
-PLATFORM_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_NAME): cv.string,
-        vol.Required(CONF_POWER_ON_JOIN): cv.positive_int,
-        vol.Required(CONF_POWER_OFF_JOIN): cv.positive_int,
-        vol.Required(CONF_MUTE_JOIN): cv.positive_int,
-        vol.Required(CONF_SOURCE_NUM_JOIN): cv.positive_int,
-        vol.Required(CONF_VOLUME_JOIN): cv.positive_int,
-        vol.Required(CONF_SOURCES): SOURCES_SCHEMA,
-        vol.Optional(CONF_SOURCE_DEFAULT): cv.positive_int,
-    },
-    extra=vol.ALLOW_EXTRA,
+
+def _validate_platform_config(config):
+    """Validate and cross-check the configured source selection method."""
+    has_source_number_join = CONF_SOURCE_NUM_JOIN in config
+    has_sources = CONF_SOURCES in config
+    has_digital_sources = CONF_SOURCE_DIGITAL_JOINS in config
+
+    if has_digital_sources and (has_source_number_join or has_sources):
+        raise vol.Invalid(
+            f"Configure either {CONF_SOURCE_NUM_JOIN} and {CONF_SOURCES}, or "
+            f"{CONF_SOURCE_DIGITAL_JOINS}, not both"
+        )
+
+    if not has_digital_sources and not (has_source_number_join and has_sources):
+        raise vol.Invalid(
+            f"Configure either both {CONF_SOURCE_NUM_JOIN} and {CONF_SOURCES}, "
+            f"or {CONF_SOURCE_DIGITAL_JOINS}"
+        )
+
+    source_map = (
+        config[CONF_SOURCE_DIGITAL_JOINS]
+        if has_digital_sources
+        else config[CONF_SOURCES]
+    )
+    source_names = list(source_map.values())
+    if len(source_names) != len(set(source_names)):
+        raise vol.Invalid("Source names must be unique")
+
+    if CONF_DEFAULT_SOURCE in config and CONF_SOURCE_DEFAULT in config:
+        raise vol.Invalid(
+            f"Configure only {CONF_DEFAULT_SOURCE}; {CONF_SOURCE_DEFAULT} is a "
+            "deprecated alias"
+        )
+    if CONF_SOURCE_DEFAULT in config:
+        _LOGGER.warning(
+            "%s is deprecated; use %s instead",
+            CONF_SOURCE_DEFAULT,
+            CONF_DEFAULT_SOURCE,
+        )
+
+    default_source = config.get(
+        CONF_DEFAULT_SOURCE, config.get(CONF_SOURCE_DEFAULT)
+    )
+    if default_source is not None and default_source not in source_map:
+        raise vol.Invalid(
+            f"{CONF_DEFAULT_SOURCE} must be one of the configured source keys"
+        )
+
+    return config
+
+
+PLATFORM_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Required(CONF_NAME): cv.string,
+            vol.Required(CONF_POWER_ON_JOIN): cv.positive_int,
+            vol.Required(CONF_POWER_OFF_JOIN): cv.positive_int,
+            vol.Required(CONF_MUTE_JOIN): cv.positive_int,
+            vol.Required(CONF_VOLUME_JOIN): cv.positive_int,
+            vol.Optional(CONF_SOURCE_NUM_JOIN): cv.positive_int,
+            vol.Optional(CONF_SOURCES): SOURCES_SCHEMA,
+            vol.Optional(CONF_SOURCE_DIGITAL_JOINS): SOURCES_SCHEMA,
+            vol.Optional(CONF_DEFAULT_SOURCE): cv.positive_int,
+            vol.Optional(CONF_SOURCE_DEFAULT): cv.positive_int,
+        },
+        extra=vol.ALLOW_EXTRA,
+    ),
+    _validate_platform_config,
 )
 
 
@@ -79,23 +142,15 @@ class CrestronRoom(MediaPlayerEntity):
         self._mute_join = config.get(CONF_MUTE_JOIN)
         self._volume_join = config.get(CONF_VOLUME_JOIN)
         self._source_number_join = config.get(CONF_SOURCE_NUM_JOIN)
-        self._sources = config.get(CONF_SOURCES)
-        self._default_source = self._get_default_source_safe(
-            config.get(CONF_SOURCE_DEFAULT)
+        self._source_digital_joins = config.get(CONF_SOURCE_DIGITAL_JOINS, {})
+        self._sources = config.get(CONF_SOURCES, self._source_digital_joins)
+        self._source_selector_by_name = {
+            name: selector for selector, name in self._sources.items()
+        }
+        self._default_source = config.get(
+            CONF_DEFAULT_SOURCE, config.get(CONF_SOURCE_DEFAULT)
         )
-
-    def _get_default_source_safe(self, cfg_src):
-        if cfg_src is not None:
-            max_idx = len(self._sources)
-            if 1 <= cfg_src <= max_idx:
-                self._default_source = cfg_src
-            else:
-                _LOGGER.error(
-                    "%s: invalid default_source %s, must be between 1 and %s",
-                    self.entity_id,
-                    cfg_src,
-                    max_idx,
-                )
+        self._active_source_conflict = None
 
     async def async_added_to_hass(self):
         self._hub.register_callback(self.process_callback)
@@ -105,6 +160,14 @@ class CrestronRoom(MediaPlayerEntity):
 
     async def process_callback(self, cbtype, value):
         self.async_write_ha_state()
+
+    async def _async_pulse_digital(self, join):
+        """Pulse a digital join, ensuring it is released if cancelled."""
+        self._hub.set_digital(join, True)
+        try:
+            await sleep(PULSE_SECONDS)
+        finally:
+            self._hub.set_digital(join, False)
 
     @cached_property
     def name(self):
@@ -124,18 +187,38 @@ class CrestronRoom(MediaPlayerEntity):
 
     @property
     def source(self):  # type: ignore
-        source_num = self._hub.get_analog(self._source_number_join)
-        if source_num == 0:
+        if self._source_number_join is not None:
+            source_num = self._hub.get_analog(self._source_number_join)
+            return self._sources.get(source_num)
+
+        active_sources = [
+            (join, name)
+            for join, name in self._source_digital_joins.items()
+            if self._hub.get_digital(join)
+        ]
+        if not active_sources:
+            self._active_source_conflict = None
             return None
-        else:
-            return self._sources[source_num]
+
+        conflict = tuple(join for join, _ in active_sources)
+        if len(active_sources) > 1 and conflict != self._active_source_conflict:
+            _LOGGER.warning(
+                "%s has multiple active source joins %s; using %s",
+                self._name,
+                list(conflict),
+                active_sources[0][1],
+            )
+            self._active_source_conflict = conflict
+        elif len(active_sources) == 1:
+            self._active_source_conflict = None
+
+        return active_sources[0][1]
 
     @property
     def state(self):  # type: ignore
         if self._hub.get_digital(self._power_on_join):
             return STATE_ON
-        else:
-            return STATE_OFF
+        return STATE_OFF
 
     @property
     def is_volume_muted(self):  # type: ignore
@@ -146,29 +229,31 @@ class CrestronRoom(MediaPlayerEntity):
         return self._hub.get_analog(self._volume_join) / 65535
 
     async def async_mute_volume(self, mute):
-        self._hub.set_digital(self._mute_join, True)
-        await sleep(0.05)
-        self._hub.set_digital(self._mute_join, False)
+        await self._async_pulse_digital(self._mute_join)
 
     async def async_set_volume_level(self, volume):
         self._hub.set_analog(self._volume_join, int(volume * 65535))
 
     async def async_select_source(self, source):
-        for input_num, name in self._sources.items():
-            if name == source:
-                self._hub.set_analog(self._source_number_join, input_num)
+        selector = self._source_selector_by_name.get(source)
+        if selector is None:
+            _LOGGER.warning("%s: unknown source %s", self._name, source)
+            return
+
+        if self._source_number_join is not None:
+            self._hub.set_analog(self._source_number_join, selector)
+        else:
+            await self._async_pulse_digital(selector)
 
     async def async_turn_off(self):
-        self._hub.set_digital(self._power_off_join, True)
-        await sleep(0.05)
-        self._hub.set_digital(self._power_off_join, False)
-        await sleep(0.05)
-        self._hub.set_analog(self._source_number_join, 0)
+        await self._async_pulse_digital(self._power_off_join)
+
+        if self._source_number_join is not None:
+            await sleep(PULSE_SECONDS)
+            self._hub.set_analog(self._source_number_join, 0)
 
     async def async_turn_on(self):
-        self._hub.set_digital(self._power_on_join, True)
-        await sleep(0.05)
-        self._hub.set_digital(self._power_on_join, False)
+        await self._async_pulse_digital(self._power_on_join)
 
         if self._default_source is not None:
-            self._hub.set_analog(self._source_number_join, self._default_source)
+            await self.async_select_source(self._sources[self._default_source])

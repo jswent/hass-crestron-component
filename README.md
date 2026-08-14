@@ -262,7 +262,9 @@ switch:
 
 Use media_player to represent the output of a multi-zone switcher. For example a PAD-8A is an 8x8 (8 inputs x 8 outputs) audio switcher. This can be represented by 8 media player components (one for each output). The component supports source selection (input selection) and volume + mute control. So it is modeled as a "speaker" media player type in Home Assistant.
 
-This works by turning power on via input selection (the default source is 1 from _sources_), and turning power off via a digital join. This can also be done by setting the input source to 0, however I found this caused complications in my program.
+Source selection can use either one analog join containing a source number, or one digital join per source. Configure one method for each media player, not both.
+
+For analog source selection, use the existing `source_number_join` and `sources` options:
 
 ```yaml
 media_player:
@@ -283,14 +285,34 @@ media_player:
     default_source: 3
 ```
 
+For digital source selection, map each digital join to its source name. A high signal provides source feedback, and selecting a source pulses its join:
+
+```yaml
+media_player:
+  - platform: crestron
+    name: "Kitchen Speakers"
+    power_on_join: 25
+    power_off_join: 26
+    mute_join: 27
+    volume_join: 19
+    source_digital_joins:
+      10: "Sonos"
+      11: "XM"
+      12: "FM"
+    default_source: 10
+```
+
 - _name_: The entity id will be derived from this string (lower-cased with \_ for spaces). The friendly name will be set to this string.
-- _power_on_join_: digital feedback (read-only) that represents the state of the audio zone's power.
-- _power_off_join_: digital join that represents the power off button of the audio zone. Signal will be pulsed.
-- _mute_join_: digital join that represents the mute state of the channel. Note this is not a toggle. Both to and from the control system True = muted, False = not muted. This might require some extra logic on the control system side if you only have logic that takes a toggle.
-- _volume_join_: analog join that represents the volume of the channel (0-65535)
-- _source_number_join_: analog join that represents the selected input for the output channel. 1 would correspond to input 1, 2 to input 2, and so on.
-- _sources_: a dictionary of _input_ to _name_ mappings. The input number is the actual input (corresponding to the source*number_join) number, whereas the name will be shown in the UI when selecting inputs/sources. So when a user selects the \_name* in the UI, the _source_number_join_ will be set to _input_.
-- _default_source_: optional integer field corresponding to sources dictionary, when set the media_player will update the `source_number_join` to the specified value when powering on.
+- _power_on_join_: digital feedback that represents the state of the audio zone's power. The same join is pulsed when turning the zone on.
+- _power_off_join_: digital join that represents the power off button of the audio zone. The signal will be pulsed.
+- _mute_join_: digital join that represents the mute state of the channel. The signal is pulsed when Home Assistant requests a mute change.
+- _volume_join_: analog join that represents the volume of the channel (0-65535).
+- _source_number_join_: for analog source selection, the analog join that represents the selected input for the output channel.
+- _sources_: for analog source selection, a dictionary mapping each source number to the name shown in Home Assistant. Selecting a source writes its number to `source_number_join`.
+- _source_digital_joins_: for digital source selection, a dictionary mapping each digital join to the name shown in Home Assistant. A high join identifies the current source, and selecting a source pulses that join for 50 ms. If no configured join is high, the current source is unknown.
+- _default_source_: optional source key to select after powering on. Use the analog source number with `sources`, or the digital join number with `source_digital_joins`.
+
+The deprecated `source_default` spelling remains accepted for compatibility; new configurations should use `default_source`.
 
 ### Control Surface Sync
 
