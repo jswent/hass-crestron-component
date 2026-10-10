@@ -1,5 +1,10 @@
 # home-assistant-crestron-component
 
+> [!WARNING]
+> **This component is no longer supported.** It has been replaced by [Crestron XSIG for Home Assistant](https://github.com/jswent/crestron-ha) (`crestron-ha`), a new integration that is installed through HACS and configured entirely in the Home Assistant UI. This repository is archived and will not receive further updates or fixes.
+>
+> The new integration uses the same `crestron` domain and replaces this component. Existing YAML configuration is not imported, so read the [migration guide](https://github.com/jswent/crestron-ha/blob/main/docs/migration.md) before installing.
+
 Integration for Home Assistant for the Crestron XSIG symbol
 
 Currently supported devices:
