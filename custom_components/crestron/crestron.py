@@ -3,6 +3,7 @@ import struct
 import logging
 
 _LOGGER = logging.getLogger(__name__)
+_CLOSE_TIMEOUT = 5
 
 
 class CrestronXsig:
@@ -12,6 +13,9 @@ class CrestronXsig:
         self._analog = {}
         self._serial = {}
         self._writer = None
+        self._connection_task = None
+        self._connections = {}
+        self._stopping = False
         self._callbacks = set()
         self._server = None
         self._available = False
@@ -19,6 +23,7 @@ class CrestronXsig:
 
     async def listen(self, port):
         """Start TCP XSIG server listening on configured port"""
+        self._stopping = False
         self._server = await asyncio.start_server(
             self.handle_connection, "0.0.0.0", port
         )
@@ -26,21 +31,54 @@ class CrestronXsig:
         _LOGGER.info(f"Listening on {addr}:{port}")
 
     async def stop(self):
-        """Stop TCP XSIG server"""
+        """Close the listener and all accepted connections before returning."""
+        self._stopping = True
         self._available = False
+        self._writer = None
+        self._connection_task = None
+        server = self._server
+        if server is not None:
+            server.close()
 
-        if self._callbacks:
-            await asyncio.gather(
-                *(callback("available", "False") for callback in self._callbacks)
-            )
-
-        _LOGGER.info("Stop called. Closing TCP connection")
-
-        if self._server:
-            self._server.close()
-            await self._server.wait_closed()
-            _LOGGER.info("TCP connection successfully closed")
+        # Close clients before Server.wait_closed(), which waits for them too.
+        connections = tuple(self._connections.items())
+        current_task = asyncio.current_task()
+        for task, writer in connections:
+            writer.close()
+            if task is not current_task:
+                task.cancel()
+            else:
+                # stop() can be called from a connection's own callback.
+                await self._wait_writer_closed(writer)
+        await asyncio.gather(
+            *(task for task, _ in connections if task is not current_task),
+            return_exceptions=True,
+        )
+        if server is not None:
+            await server.wait_closed()
             self._server = None
+        await self._notify_callbacks("available", "False")
+        _LOGGER.info("TCP server and connections closed")
+
+    async def _wait_writer_closed(self, writer):
+        """Bound graceful closure when a peer stops draining queued writes."""
+        try:
+            await asyncio.wait_for(writer.wait_closed(), _CLOSE_TIMEOUT)
+        except asyncio.TimeoutError:
+            writer.transport.abort()
+        except asyncio.CancelledError:
+            writer.transport.abort()
+            raise
+        except (ConnectionError, OSError):
+            _LOGGER.debug("Control system connection closed with an error", exc_info=True)
+
+    async def _notify_callbacks(self, cbtype, value):
+        """A failed or removed subscriber must not prevent other notifications."""
+        for callback in tuple(self._callbacks):
+            try:
+                await callback(cbtype, value)
+            except Exception:
+                _LOGGER.exception("Error in Crestron callback for %s", cbtype)
 
     def register_sync_all_joins_callback(self, callback):
         """Allow callback to be registred for when control system requests an update to all joins"""
@@ -56,18 +94,57 @@ class CrestronXsig:
         self._callbacks.discard(callback)
 
     async def handle_connection(self, reader, writer):
-        """Parse packets from Crestron XSIG symbol"""
-        self._writer = writer
-        peer = writer.get_extra_info("peername")
-        _LOGGER.info(f"Control system connection from {peer}")
-        _LOGGER.debug("Sending update request")
-        writer.write(b"\xfd")
-        self._available = True
-        for callback in self._callbacks:
-            await callback("available", "True")
+        """Use the newest connection and always release its resources on exit."""
+        task = asyncio.current_task()
+        self._connections[task] = writer
+        try:
+            # A connection may have been accepted just before stop() closed the listener.
+            if self._stopping:
+                return
 
-        connected = True
-        while connected:
+            previous_writer = self._writer
+            previous_task = self._connection_task
+            self._writer = writer
+            self._connection_task = task
+            if previous_writer is not None:
+                previous_writer.close()
+            if previous_task is not None:
+                previous_task.cancel()
+
+            peer = writer.get_extra_info("peername")
+            _LOGGER.info("Control system connection from %s", peer)
+            _LOGGER.debug("Sending update request")
+            writer.write(b"\xfd")
+            self._available = True
+            await self._notify_callbacks("available", "True")
+            await self._read_messages(reader, writer)
+        except asyncio.IncompleteReadError:
+            _LOGGER.debug("Control system disconnected during an XSIG message")
+        except (ConnectionError, OSError):
+            _LOGGER.debug("Control system connection lost", exc_info=True)
+        except (asyncio.LimitOverrunError, UnicodeError):
+            _LOGGER.warning("Invalid XSIG serial message", exc_info=True)
+        except Exception:
+            _LOGGER.exception("Error handling control system connection")
+        finally:
+            writer.close()
+            try:
+                # A retired handler must not clear a newer connection's state.
+                if self._writer is writer:
+                    self._writer = None
+                    self._available = False
+                    await self._notify_callbacks("available", "False")
+            finally:
+                try:
+                    await self._wait_writer_closed(writer)
+                finally:
+                    if self._connection_task is task:
+                        self._connection_task = None
+                    self._connections.pop(task, None)
+
+    async def _read_messages(self, reader, writer):
+        """Read XSIG messages while this connection owns the hub."""
+        while self._writer is writer and not self._stopping:
             data = await reader.read(1)
             if data:
                 # Sync all joins request
@@ -88,8 +165,7 @@ class CrestronXsig:
                         value = ~header[0] >> 5 & 0b1
                         self._digital[join] = True if value == 1 else False
                         _LOGGER.debug(f"Got Digital: {join} = {value}")
-                        for callback in self._callbacks:
-                            await callback(f"d{join}", str(value))
+                        await self._notify_callbacks(f"d{join}", str(value))
                     # Analog Join
                     elif (
                         data[0] & 0b11001000 == 0b11000000
@@ -103,8 +179,7 @@ class CrestronXsig:
                         )
                         self._analog[join] = value
                         _LOGGER.debug(f"Got Analog: {join} = {value}")
-                        for callback in self._callbacks:
-                            await callback(f"a{join}", str(value))
+                        await self._notify_callbacks(f"a{join}", str(value))
                     # Serial Join
                     elif (
                         data[0] & 0b11111000 == 0b11001000
@@ -116,16 +191,12 @@ class CrestronXsig:
                         string = data[2:-1].decode("utf-8")
                         self._serial[join] = string
                         _LOGGER.debug(f"Got String: {join} = {string}")
-                        for callback in self._callbacks:
-                            await callback(f"s{join}", string)
+                        await self._notify_callbacks(f"s{join}", string)
                     else:
                         _LOGGER.debug(f"Unknown Packet: {data.hex()}")
             else:
                 _LOGGER.info("Control system disconnected")
-                connected = False
-                self._available = False
-                for callback in self._callbacks:
-                    await callback("available", "False")
+                break
 
     def is_available(self):
         """Returns True if control system is connected"""
@@ -145,7 +216,7 @@ class CrestronXsig:
 
     def set_analog(self, join, value):
         """Send Analog Join to Crestron XSIG symbol"""
-        if self._writer:
+        if self._writer and not self._writer.is_closing():
             data = struct.pack(
                 ">BBBB",
                 0b11000000 | (value >> 10 & 0b00110000) | (join - 1) >> 7,
@@ -160,7 +231,7 @@ class CrestronXsig:
 
     def set_digital(self, join, value):
         """Send Digital Join to Crestron XSIG symbol"""
-        if self._writer:
+        if self._writer and not self._writer.is_closing():
             data = struct.pack(
                 ">BB",
                 0b10000000 | (~value << 5 & 0b00100000) | (join - 1) >> 7,
@@ -176,7 +247,7 @@ class CrestronXsig:
         if len(string) > 252:
             _LOGGER.info(f"Could not send. String too long ({len(string)}>252)")
             return
-        elif self._writer:
+        elif self._writer and not self._writer.is_closing():
             data = struct.pack(
                 ">BB", 0b11001000 | ((join - 1) >> 7), (join - 1) & 0b01111111
             )

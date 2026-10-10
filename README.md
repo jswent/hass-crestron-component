@@ -20,6 +20,10 @@ Currently supported devices:
   - The component acts as a TCP server, so you must specify the port number to listen on using the `port:` parameter.
 - Restart Home Assistant
 
+Each integration instance accepts one active control-system connection. A new
+connection replaces and closes the previous one, so a reconnect can recover
+without waiting for the old connection to time out.
+
 ## Adding multiple XSIG domains to Home Assistant
 
 If you would like to separate the instances of this integration (for example, to use across multiple Crestron processor slots), you may achieve this by duplicating this component in Home Assistant.
