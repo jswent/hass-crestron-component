@@ -77,7 +77,7 @@ class CrestronXsig:
                         await self._sync_all_joins_callback()
                         _LOGGER.debug("Calling sync-all-joins callback")
                 else:
-                    data += await reader.read(1)
+                    data += await reader.readexactly(1)
                     # Digital Join
                     if (
                         data[0] & 0b11000000 == 0b10000000
@@ -95,7 +95,7 @@ class CrestronXsig:
                         data[0] & 0b11001000 == 0b11000000
                         and data[1] & 0b10000000 == 0b00000000
                     ):
-                        data += await reader.read(2)
+                        data += await reader.readexactly(2)
                         header = struct.unpack("BBBB", data)
                         join = ((header[0] & 0b00000111) << 7 | header[1]) + 1
                         value = (
